@@ -1,0 +1,61 @@
+# Visual Studio and MSBuild
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.cache
+*.tlog
+
+# Debug symbols and diagnostics
+*.pdb
+*.dmp
+*.log
+logs/
+last-error.txt
+
+# Local application state
+settings.json
+*.settings.json
+CodexUsageMonitor.local.json
+*.local.json
+.env
+.env.*
+
+# Signing material and credentials
+*.pfx
+*.p12
+*.key
+*.snk
+secrets/
+credentials/
+secrets.json
+credentials.json
+token.json
+tokens.json
+*.secrets.json
+*.credentials.json
+*.token.json
+*.tokens.json
+
+# Temporary, build, and release staging output
+*.tmp
+*.bak
+*.zip
+artifacts/
+packages/
+release/*
+!release/README.md
+release-staging/
+staging/
+dist/
+out/
+publish/
+TestResults/
+
+# Deployable binaries belong in GitHub Release assets, never in source control.
+*.exe
+*.dll
+*.msi
+*.msix
+*.nupkg

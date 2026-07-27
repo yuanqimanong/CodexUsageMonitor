@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Usage Monitor"
+  short_description: "Control and diagnose the Windows usage monitor"
+  default_prompt: "Use $codex-usage-monitor to start the local Codex usage monitor and report its status."

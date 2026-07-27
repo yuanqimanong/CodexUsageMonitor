@@ -1,0 +1,68 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build, assemble, and validate release assets
+        id: package
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = .\scripts\Build-ReleaseArtifacts.ps1 `
+              -OutputDirectory $env:RUNNER_TEMP
+          $artifactRoot = $release.OutputDirectory
+
+          "artifact_root=$artifactRoot" |
+              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "raw_exe=$(Join-Path $artifactRoot 'CodexUsageMonitor.exe')" |
+              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha_file=$(Join-Path $artifactRoot 'SHA256SUMS.txt')" |
+              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "standalone_zip=$(Join-Path $artifactRoot 'CodexUsageMonitor-windows-x64.zip')" |
+              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "plugin_zip=$(Join-Path $artifactRoot 'codex-usage-monitor-plugin.zip')" |
+              Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexUsageMonitor-release-assets
+          path: |
+            ${{ steps.package.outputs.raw_exe }}
+            ${{ steps.package.outputs.sha_file }}
+            ${{ steps.package.outputs.standalone_zip }}
+            ${{ steps.package.outputs.plugin_zip }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "${{ steps.package.outputs.raw_exe }}" `
+            "${{ steps.package.outputs.sha_file }}" `
+            "${{ steps.package.outputs.standalone_zip }}" `
+            "${{ steps.package.outputs.plugin_zip }}" `
+            --repo "${{ github.repository }}" `
+            --title "Codex Usage Monitor ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag

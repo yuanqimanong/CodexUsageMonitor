@@ -1,0 +1,34 @@
+{
+  "name": "codex-usage-monitor",
+  "version": "1.1.0+codex.20260727032013",
+  "description": "A lightweight Windows desktop monitor for Codex rate-limit usage and reset times.",
+  "author": {
+    "name": "Codex Usage Monitor contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "usage",
+    "rate-limit",
+    "windows",
+    "desktop"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Usage Monitor",
+    "shortDescription": "Monitor Codex usage and reset times on Windows.",
+    "longDescription": "Start, stop, inspect, and configure the lightweight Codex Usage Monitor desktop companion. It reads rate-limit data through the locally installed, signed-in Codex Desktop app and does not require an API key.",
+    "developerName": "Codex Usage Monitor contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "brandColor": "#08E8DE",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "defaultPrompt": [
+      "\u542f\u52a8 Codex Usage Monitor\uff0c\u5e76\u62a5\u544a\u8fd0\u884c\u72b6\u6001\u3002",
+      "\u68c0\u67e5 Codex Usage Monitor \u662f\u5426\u5df2\u8bbe\u7f6e\u4e3a\u5f00\u673a\u542f\u52a8\u3002"
+    ]
+  }
+}
