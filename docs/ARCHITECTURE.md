@@ -26,6 +26,10 @@
 | `AppServerClient` | 启动本地 `codex app-server`，执行初始化和 JSON-RPC 调用 |
 | `CodexLocator` | 便携定位 `codex.exe`，支持可信环境变量覆盖 |
 | `RateLimitParser` | 把 app-server 响应收敛为显示模型 |
+| `ChatPanel` | 运行会话的单列卡片、速度与 Token 明细，可见时每 3 秒读取 |
+| `LocalThreadCatalog` | 通过系统 winsqlite3 只读查询现存主会话，过滤删除、归档及后台会话 |
+| `LocalSessionReader` | 活跃会话 JSONL 的尾部读取、增量跟随和缓存淘汰 |
+| `SessionMetricsParser` | 新旧 Token 记录去重、调用耗时和工具间隔、缺失字段处理 |
 | `SettingsStore` | 在当前用户的 LocalAppData 保存界面设置 |
 | `StartupManager` | 管理当前用户的 `HKCU` Run 项 |
 | `WindowEdgeSnapper` | 多显示器工作区、主边选择、边缘吸附、恢复和拖动状态 |
@@ -69,8 +73,23 @@ Running → Exit (tray or --shutdown)
 - `%LOCALAPPDATA%\CodexUsageMonitor\rollback\`（package installer）
 - `<install directory>\.codex-usage-monitor-install.json`（安装所有权与可选启动项恢复信息）
 
-可持久化的设置限于窗口位置、置顶、主题和边缘吸附开关。认证材料和 rate-limit 原始
+可持久化的设置包括窗口位置、置顶、主题、吸附边缘、当前页面、沿边位置和数据目录。认证材料和 rate-limit 原始
 响应不应写入设置。
+
+会话页以只读 SQLite 查询结果为唯一清单，不扫描遗留日志发现会话。名称优先使用 `name`，空名称或旧版数据库回退到 `title`。
+候选会话取数据库 `updated_at` 和文件修改时间中较新的活动时间，避免 Windows 延迟刷新文件时间造成漏显。运行状态由 JSONL 事件判断。每个候选日志首次
+读取末尾 1 MiB，此后增量跟随，单轮最多读取 8 MiB，单行最多 2 MiB。半行和拆分的
+UTF-8 字符等待后续追加，截断或替换后重新读取尾部。已完成、中断、删除、归档、后台
+子会话和连续 5 分钟无更新的会话不显示。长时间静默的工具或思考可能暂时被隐藏。
+卡片通过 ObservableCollection 原位更新，避免每轮重建控件导致滚动跳动。
+窗口按最多 5 张卡片计算高度，超过 5 条时滚动。屏幕工作区不足时限制窗口高度并允许滚动，空列表使用紧凑提示区。
+速度使用本地观测时间，在工具开始前结束计时，全部工具返回后开启下一段。
+隐藏、收起和切回额度页后暂停新的读取任务，缓存只保留清单中近期更新的会话。
+
+吸附布局使用物理像素和当前显示器工作区，展开、收起共享稳定的沿边锚点。
+悬停 180 ms 展开，离开 900 ms 后收起。窗口尺寸一次更新到位，展开内容使用 120 ms 淡入，遵循系统动画设置。
+拖动吸附后立即收起。若鼠标仍在半圆内，等待移出后再允许悬停展开，避免松手后马上反弹。
+拖拽事件与鼠标捕获归属同一个 Grid。空白区域移动超过系统拖动阈值后进入原生窗口移动循环，点击控件正常交互。松开、失去捕获、窗口失活或隐藏时清理待拖动状态。
 
 ## 异常处理
 

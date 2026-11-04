@@ -39,7 +39,7 @@ namespace CodexUsageMonitor
             switch (theme)
             {
                 case MonitorTheme.Glass:
-                    return "透明毛玻璃";
+                    return "雾灰";
                 case MonitorTheme.Cyberpunk:
                     return "赛博朋克科技";
                 default:

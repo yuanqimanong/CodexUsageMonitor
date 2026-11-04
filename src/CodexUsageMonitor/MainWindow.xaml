@@ -1,9 +1,10 @@
 <Window x:Class="CodexUsageMonitor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:CodexUsageMonitor"
         Title="Codex Usage Monitor"
         Width="392"
-        Height="232"
+        Height="286"
         MinWidth="36"
         MinHeight="36"
         WindowStyle="None"
@@ -14,17 +15,20 @@
         Topmost="True"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
-    <Grid Background="Transparent"
+    <Grid x:Name="DragSurface" Background="Transparent"
           MouseEnter="WindowSurface_MouseEnter"
           MouseLeave="WindowSurface_MouseLeave"
-          MouseLeftButtonDown="WindowSurface_MouseLeftButtonDown">
+          MouseLeftButtonDown="WindowSurface_MouseLeftButtonDown"
+          MouseMove="WindowSurface_MouseMove"
+          MouseLeftButtonUp="WindowSurface_MouseLeftButtonUp"
+          LostMouseCapture="WindowSurface_LostMouseCapture">
       <Grid x:Name="WindowSurface"
             Margin="14"
-            ToolTip="拖动到屏幕任意边缘即可磁吸"
-            ToolTipService.InitialShowDelay="1500"
             AutomationProperties.HelpText="拖动到屏幕任意边缘即可磁吸">
         <Grid.ContextMenu>
             <ContextMenu>
+                <MenuItem Header="切换皮肤" Click="ThemeButton_Click"/>
+                <Separator/>
                 <MenuItem Header="吸附到左侧"
                           Click="DockLeftMenuItem_Click"/>
                 <MenuItem Header="吸附到右侧"
@@ -52,6 +56,28 @@
             </Border.Effect>
             <Grid ClipToBounds="True">
               <Grid x:Name="FullPanel">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="34"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Margin="14,5,14,0">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="QuotaTab" Content="额度" Width="56" FontFamily="Microsoft YaHei UI" FontSize="11"
+                                Style="{StaticResource ChromeButtonStyle}" Click="QuotaTab_Click"/>
+                        <Button x:Name="ChatTab" Content="会话" Width="56" FontFamily="Microsoft YaHei UI" FontSize="11"
+                                Style="{StaticResource ChromeButtonStyle}" Click="ChatTab_Click"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="KeepOpenButton" Content="◇" Style="{StaticResource ChromeButtonStyle}"
+                                ToolTip="保持展开" Click="KeepOpenButton_Click"/>
+                            <Button x:Name="CollapseButton" Content="◁" Style="{StaticResource ChromeButtonStyle}" ToolTip="收起到边缘" Click="CollapseButton_Click"/>
+                            <Button x:Name="ThemeButton" Content="◈" Style="{StaticResource ChromeButtonStyle}" ToolTip="切换皮肤" Click="ThemeButton_Click"/>
+                            <Button x:Name="RefreshButton" Content="↻" Style="{StaticResource ChromeButtonStyle}" ToolTip="立即刷新" Click="RefreshButton_Click"/>
+                            <Button Content="×" Style="{StaticResource ChromeButtonStyle}" ToolTip="隐藏到托盘" Click="HideButton_Click"/>
+                    </StackPanel>
+                </Grid>
+                <local:ChatPanel x:Name="ChatView" Grid.Row="1" Visibility="Collapsed"/>
+                <Grid x:Name="QuotaPanel" Grid.Row="1">
                 <Canvas IsHitTestVisible="False"
                         Opacity="{DynamicResource ThemeDecorationOpacity}">
                     <Line X1="0" Y1="44" X2="364" Y2="44"
@@ -104,10 +130,6 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Ellipse x:Name="StatusDot"
                                  Width="8"
@@ -139,30 +161,6 @@
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    Text="正在连接"
                                    TextTrimming="CharacterEllipsis"/>
-                        <Button Grid.Column="3"
-                                x:Name="CollapseButton"
-                                Visibility="Collapsed"
-                                Style="{StaticResource ChromeButtonStyle}"
-                                ToolTip="收起到屏幕边缘"
-                                Click="CollapseButton_Click"
-                                Content="◁"/>
-                        <Button Grid.Column="4"
-                                x:Name="ThemeButton"
-                                Style="{StaticResource ChromeButtonStyle}"
-                                ToolTip="切换皮肤"
-                                Click="ThemeButton_Click"
-                                Content="◈"/>
-                        <Button Grid.Column="5"
-                                x:Name="RefreshButton"
-                                Style="{StaticResource ChromeButtonStyle}"
-                                ToolTip="立即刷新"
-                                Click="RefreshButton_Click"
-                                Content="↻"/>
-                        <Button Grid.Column="6"
-                                Style="{StaticResource ChromeButtonStyle}"
-                                ToolTip="隐藏到托盘"
-                                Click="HideButton_Click"
-                                Content="×"/>
                     </Grid>
 
                     <Grid Grid.Row="1">
@@ -237,12 +235,13 @@
                     </Grid>
                 </Grid>
               </Grid>
+              </Grid>
 
               <Grid x:Name="CompactPanel"
                     Visibility="Collapsed"
                     Margin="0"
                     ToolTipService.InitialShowDelay="1500"
-                    ToolTip="双击展开；向屏幕内拖动可脱离吸附">
+                    ToolTip="悬停或双击展开；拖动可脱离吸附">
                   <TextBlock x:Name="MiniRemainingText"
                              Margin="2"
                              HorizontalAlignment="Stretch"

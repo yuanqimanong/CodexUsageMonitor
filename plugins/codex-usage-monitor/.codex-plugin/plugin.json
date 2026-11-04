@@ -1,7 +1,7 @@
 {
   "name": "codex-usage-monitor",
   "version": "1.1.0+codex.20260727032013",
-  "description": "A lightweight Windows desktop monitor for Codex rate-limit usage and reset times.",
+  "description": "A lightweight Windows panel for Codex quota, local chat speed and Token usage.",
   "author": {
     "name": "Codex Usage Monitor contributors"
   },
@@ -16,8 +16,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Usage Monitor",
-    "shortDescription": "Monitor Codex usage and reset times on Windows.",
-    "longDescription": "Start, stop, inspect, and configure the lightweight Codex Usage Monitor desktop companion. It reads rate-limit data through the locally installed, signed-in Codex Desktop app and does not require an API key.",
+    "shortDescription": "View Codex quota, chat speed and Token usage.",
+    "longDescription": "Start, stop, inspect, and configure the lightweight Codex Usage Monitor desktop companion. See running local sessions as compact cards with response speed and Token usage. Quota comes from the locally installed, signed-in Codex Desktop app.",
     "developerName": "Codex Usage Monitor contributors",
     "category": "Productivity",
     "capabilities": [

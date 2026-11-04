@@ -1,6 +1,6 @@
 ---
 name: codex-usage-monitor
-description: Control and diagnose the Codex Usage Monitor Windows desktop companion. Use when the user asks to start, stop, show, inspect, or troubleshoot the monitor; check whether it is running; enable or disable start-with-Windows; or locate its executable and local status. The monitor displays Codex rate-limit usage and reset times from the signed-in Codex Desktop account.
+description: Control and diagnose the Codex Usage Monitor Windows desktop companion. Use when the user asks to start, stop, show, inspect, or troubleshoot the monitor; view local chat speed and Token usage; check whether it is running; enable or disable start-with-Windows; or locate its executable and local status.
 ---
 
 # Codex Usage Monitor
@@ -81,6 +81,14 @@ package-level installer and its `-ForceStartupReplace` option.
 
 ## Diagnostics and boundaries
 
+- For session speed and Token usage, start or show the monitor and direct the user to the floating
+  panel's “会话” tab. Running main sessions appear automatically as scrolling cards. The panel
+  reads the current Codex SQLite catalog read-only, filters deleted, archived and background
+  sessions, and follows recent JSONL logs. “数据目录” selects the source folder.
+- Speeds update after completed model calls using client-observed timing. Missing fields show
+  `—`. Cached input is part of input, and reasoning output is part of output. Sessions with no
+  new records for five minutes are hidden until another update. Compressed logs are unsupported.
+  Session statistics pause while the session page is hidden.
 - Treat displayed percentages as Codex rate-limit windows, not billing or personal spending.
 - The executable uses the local authenticated `codex app-server` transport. Never request,
   extract, log, or copy account cookies, OAuth tokens, API keys, or browser storage.
