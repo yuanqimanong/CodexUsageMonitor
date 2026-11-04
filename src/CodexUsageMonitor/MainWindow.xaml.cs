@@ -1,12 +1,14 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
@@ -16,7 +18,8 @@ namespace CodexUsageMonitor
     public partial class MainWindow : Window
     {
         private const double FullWindowWidth = 392;
-        private const double FullWindowHeight = 232;
+        private const double FullWindowHeight = 286;
+        private const double ChatWindowWidth = 520;
         private const double FullSurfaceMargin = 14;
         private const double FullCornerRadius = 14;
         private const double CompactSurfaceMargin = 6;
@@ -29,6 +32,7 @@ namespace CodexUsageMonitor
         private readonly MonitorSettings settings;
         private readonly DispatcherTimer countdownTimer;
         private readonly DispatcherTimer collapseTimer;
+        private readonly DispatcherTimer expandTimer;
         private readonly Forms.NotifyIcon trayIcon;
         private readonly Forms.ToolStripMenuItem showMenuItem;
         private readonly Forms.ToolStripMenuItem topMostMenuItem;
@@ -51,6 +55,10 @@ namespace CodexUsageMonitor
         private bool compactMode;
         private bool isDragging;
         private bool isProgrammaticLayout;
+        private bool chatMode;
+        private bool keepExpanded;
+        private bool waitForHoverExit;
+        private System.Windows.Point? dragStart;
         private WindowDockEdge? dockedHorizontalEdge;
         private WindowDockEdge? dockedVerticalEdge;
 
@@ -80,8 +88,23 @@ namespace CodexUsageMonitor
             countdownTimer.Tick += CountdownTimer_Tick;
 
             collapseTimer = new DispatcherTimer();
-            collapseTimer.Interval = TimeSpan.FromMilliseconds(800);
+            collapseTimer.Interval = TimeSpan.FromMilliseconds(900);
             collapseTimer.Tick += CollapseTimer_Tick;
+            expandTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+            expandTimer.Tick += delegate
+            {
+                expandTimer.Stop();
+                if (compactMode && IsMouseOver && !isDragging && !dragStart.HasValue &&
+                    !waitForHoverExit && !IsContextMenuOpen)
+                    ExpandDockedPanel();
+            };
+            ChatView.Configure(settings.CodexDataDirectory);
+            ChatView.PreferencesChanged += delegate { SaveSettings(); };
+            ChatView.ContentHeightChanged += delegate
+            {
+                if (chatMode && !compactMode && !isDragging && Math.Abs(Height - ExpandedHeight) > 0.5)
+                    ApplyWindowSize(ExpandedWidth, ExpandedHeight, WindowSurface.Margin);
+            };
 
             trayIcon = new Forms.NotifyIcon();
             trayIcon.Text = BuildInfo.ProductName;
@@ -135,7 +158,7 @@ namespace CodexUsageMonitor
                 "黑白极简",
                 MonitorTheme.Minimal);
             glassThemeMenuItem = CreateThemeMenuItem(
-                "透明毛玻璃",
+                "雾灰",
                 MonitorTheme.Glass);
             cyberpunkThemeMenuItem = CreateThemeMenuItem(
                 "赛博朋克科技",
@@ -178,7 +201,9 @@ namespace CodexUsageMonitor
             Closing += MainWindow_Closing;
             LocationChanged += MainWindow_LocationChanged;
             IsVisibleChanged += MainWindow_IsVisibleChanged;
+            Deactivated += delegate { CancelPendingDrag(); };
             SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
+            SetActiveView(settings.ChatView);
         }
 
         public void StartHidden()
@@ -208,6 +233,7 @@ namespace CodexUsageMonitor
             }
 
             Topmost = settings.TopMost;
+            if (compactMode) ExpandDockedPanel();
             Activate();
             SyncVisibilityMenuText();
         }
@@ -227,8 +253,11 @@ namespace CodexUsageMonitor
             }
 
             SaveSettings();
+            CancelPendingDrag();
             countdownTimer.Stop();
             collapseTimer.Stop();
+            expandTimer.Stop();
+            ChatView.Dispose();
             SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
             edgeSnapper.MoveCompleted -= EdgeSnapper_MoveCompleted;
             edgeSnapper.Dispose();
@@ -262,7 +291,13 @@ namespace CodexUsageMonitor
                 new Action(delegate
                 {
                     edgeSnapper.ClampToWorkArea();
-                    if (edgeSnapper.Enabled && edgeSnapper.SnapNow())
+                    WindowDockEdge savedEdge;
+                    if (edgeSnapper.Enabled && Enum.TryParse(settings.DockEdge, out savedEdge) &&
+                        Enum.IsDefined(typeof(WindowDockEdge), savedEdge))
+                    {
+                        DockToEdge(savedEdge, settings.DockAnchorRatio);
+                    }
+                    else if (edgeSnapper.Enabled && edgeSnapper.SnapNow())
                     {
                         CaptureDockEdges();
                         EnterCompactMode();
@@ -315,7 +350,13 @@ namespace CodexUsageMonitor
             Dispatcher.BeginInvoke(
                 new Action(delegate
                 {
-                    if (HasDockEdges)
+                    if (exiting) return;
+                    edgeSnapper.ResetDockAnchor();
+                    if (chatMode && !compactMode)
+                    {
+                        ApplyWindowSize(ExpandedWidth, ExpandedHeight, WindowSurface.Margin);
+                    }
+                    else if (HasDockEdges)
                     {
                         DockToStoredEdges();
                     }
@@ -668,6 +709,11 @@ namespace CodexUsageMonitor
 
         private void RefreshButton_Click(object sender, RoutedEventArgs eventArgs)
         {
+            if (chatMode)
+            {
+                ChatView.RefreshCatalog();
+                return;
+            }
             ConnectionText.Text = "正在刷新…";
             service.Refresh();
         }
@@ -684,6 +730,9 @@ namespace CodexUsageMonitor
 
         private void HideToTray()
         {
+            CancelPendingDrag();
+            expandTimer.Stop();
+            collapseTimer.Stop();
             SaveSettings();
             Hide();
             SyncVisibilityMenuText();
@@ -864,17 +913,56 @@ namespace CodexUsageMonitor
             }
         }
 
+        private double ExpandedWidth { get { return chatMode ? ChatWindowWidth : FullWindowWidth; } }
+        private double ExpandedHeight
+        {
+            get
+            {
+                if (!chatMode) return FullWindowHeight;
+                double height = ChatView.PreferredHeight + FullPanel.RowDefinitions[0].Height.Value +
+                    SurfaceBorder.BorderThickness.Top + SurfaceBorder.BorderThickness.Bottom + FullSurfaceMargin * 2;
+                return Math.Min(height, edgeSnapper.GetAvailableHeight());
+            }
+        }
+
+        private void QuotaTab_Click(object sender, RoutedEventArgs args) { SetActiveView(false); }
+        private void ChatTab_Click(object sender, RoutedEventArgs args) { SetActiveView(true); }
+
+        private void SetActiveView(bool showChat)
+        {
+            chatMode = showChat;
+            QuotaPanel.Visibility = showChat ? Visibility.Collapsed : Visibility.Visible;
+            ChatView.Visibility = showChat ? Visibility.Visible : Visibility.Collapsed;
+            RefreshButton.ToolTip = showChat ? "刷新运行中的会话" : "刷新额度";
+            QuotaTab.SetResourceReference(Button.BackgroundProperty, showChat ? "SurfaceBrush" : "ChromePressedBrush");
+            ChatTab.SetResourceReference(Button.BackgroundProperty, showChat ? "ChromePressedBrush" : "SurfaceBrush");
+            if (!compactMode) ShowExpandedPanel();
+            if (initialized) SaveSettings();
+        }
+
+        private void KeepOpenButton_Click(object sender, RoutedEventArgs args)
+        {
+            keepExpanded = !keepExpanded;
+            KeepOpenButton.Content = keepExpanded ? "◆" : "◇";
+            KeepOpenButton.ToolTip = keepExpanded ? "允许自动收起" : "保持展开";
+            if (keepExpanded) collapseTimer.Stop();
+            else ScheduleCompactMode();
+        }
+
         private void WindowSurface_MouseEnter(
             object sender,
             MouseEventArgs eventArgs)
         {
             collapseTimer.Stop();
+            if (compactMode && !isDragging && !dragStart.HasValue && !waitForHoverExit) expandTimer.Start();
         }
 
         private void WindowSurface_MouseLeave(
             object sender,
             MouseEventArgs eventArgs)
         {
+            waitForHoverExit = false;
+            expandTimer.Stop();
             ScheduleCompactMode();
         }
 
@@ -887,6 +975,9 @@ namespace CodexUsageMonitor
                 return;
             }
 
+            keepExpanded = false;
+            KeepOpenButton.Content = "◇";
+            KeepOpenButton.ToolTip = "保持展开";
             EnterCompactMode();
             SaveSettings();
         }
@@ -897,10 +988,13 @@ namespace CodexUsageMonitor
             if (!HasDockEdges ||
                 compactMode ||
                 isDragging ||
+                keepExpanded ||
+                dragStart.HasValue ||
+                ChatView.IsInteracting ||
                 IsMouseOver ||
-                (WindowSurface.ContextMenu != null &&
-                    WindowSurface.ContextMenu.IsOpen))
+                IsContextMenuOpen)
             {
+                ScheduleCompactMode();
                 return;
             }
 
@@ -911,7 +1005,7 @@ namespace CodexUsageMonitor
         private void ScheduleCompactMode()
         {
             collapseTimer.Stop();
-            if (HasDockEdges && !compactMode && !isDragging)
+            if (IsVisible && HasDockEdges && !compactMode && !isDragging && !dragStart.HasValue && !keepExpanded)
             {
                 collapseTimer.Start();
             }
@@ -919,6 +1013,7 @@ namespace CodexUsageMonitor
 
         private void CaptureDockEdges()
         {
+            edgeSnapper.ResetDockAnchor();
             WindowDockEdge? primaryEdge =
                 edgeSnapper.PrimaryDockEdge ??
                 edgeSnapper.LastHorizontalEdge ??
@@ -940,9 +1035,11 @@ namespace CodexUsageMonitor
 
         private void ClearDockEdges()
         {
+            edgeSnapper.ResetDockAnchor();
             dockedHorizontalEdge = null;
             dockedVerticalEdge = null;
             collapseTimer.Stop();
+            expandTimer.Stop();
         }
 
         private void EnterCompactMode()
@@ -953,18 +1050,21 @@ namespace CodexUsageMonitor
             }
 
             collapseTimer.Stop();
+            expandTimer.Stop();
+            Thickness previousMargin = WindowSurface.Margin;
             compactMode = true;
+            // A drop/collapse under the pointer must stay compact until a fresh hover.
+            waitForHoverExit = IsMouseOver;
+            FullPanel.BeginAnimation(OpacityProperty, null);
             FullPanel.Visibility = Visibility.Collapsed;
             CompactPanel.Visibility = Visibility.Visible;
             CollapseButton.Visibility = Visibility.Collapsed;
 
             double compactWidth;
             double compactHeight;
-            ConfigureCompactSurface(
-                GetStoredDockEdge(),
-                out compactWidth,
-                out compactHeight);
-            ApplyWindowSize(compactWidth, compactHeight);
+            ConfigureCompactSurface(GetStoredDockEdge(), out compactWidth, out compactHeight);
+            ApplyWindowSize(compactWidth, compactHeight, previousMargin);
+            if (!IsMouseOver) waitForHoverExit = false;
         }
 
         private void ExpandDockedPanel()
@@ -974,16 +1074,14 @@ namespace CodexUsageMonitor
                 return;
             }
 
-            compactMode = false;
-            CompactPanel.Visibility = Visibility.Collapsed;
-            FullPanel.Visibility = Visibility.Visible;
-            CollapseButton.Visibility = Visibility.Visible;
-            ConfigureFullSurface();
-            ApplyWindowSize(FullWindowWidth, FullWindowHeight);
+            ShowExpandedPanel();
         }
 
         private void ShowExpandedPanel()
         {
+            bool wasCompact = compactMode;
+            waitForHoverExit = false;
+            Thickness previousMargin = WindowSurface.Margin;
             compactMode = false;
             CompactPanel.Visibility = Visibility.Collapsed;
             FullPanel.Visibility = Visibility.Visible;
@@ -991,13 +1089,20 @@ namespace CodexUsageMonitor
                 ? Visibility.Visible
                 : Visibility.Collapsed;
             ConfigureFullSurface();
-            ApplyWindowSize(FullWindowWidth, FullWindowHeight);
+            ApplyWindowSize(ExpandedWidth, ExpandedHeight, previousMargin);
+            if (wasCompact && initialized && IsVisible && SystemParameters.ClientAreaAnimation)
+            {
+                FullPanel.BeginAnimation(OpacityProperty, new DoubleAnimation(0.65, 1,
+                    TimeSpan.FromMilliseconds(120)) { FillBehavior = FillBehavior.Stop });
+            }
+            ScheduleCompactMode();
         }
 
         private void ShowExpandedPanelDetached(
             WindowDockEdge? originalHorizontalEdge,
             WindowDockEdge? originalVerticalEdge)
         {
+            Thickness previousMargin = WindowSurface.Margin;
             compactMode = false;
             CompactPanel.Visibility = Visibility.Collapsed;
             FullPanel.Visibility = Visibility.Visible;
@@ -1007,13 +1112,14 @@ namespace CodexUsageMonitor
             try
             {
                 if (!edgeSnapper.ResizePreservingEdgeOffsets(
-                    FullWindowWidth,
-                    FullWindowHeight,
+                    ExpandedWidth,
+                    ExpandedHeight,
                     originalHorizontalEdge,
-                    originalVerticalEdge))
+                    originalVerticalEdge,
+                    previousMargin))
                 {
-                    Width = FullWindowWidth;
-                    Height = FullWindowHeight;
+                    Width = ExpandedWidth;
+                    Height = ExpandedHeight;
                     UpdateLayout();
                 }
             }
@@ -1023,18 +1129,20 @@ namespace CodexUsageMonitor
             }
         }
 
-        private void ApplyWindowSize(double width, double height)
+        private void ApplyWindowSize(double width, double height, Thickness previousMargin)
         {
             isProgrammaticLayout = true;
             try
             {
+                if (HasDockEdges && edgeSnapper.ResizeDocked(width, height, previousMargin,
+                    GetStoredDockEdge()))
+                {
+                    return;
+                }
                 Width = width;
                 Height = height;
                 UpdateLayout();
-                if (HasDockEdges)
-                {
-                    DockToStoredEdges();
-                }
+                if (initialized) edgeSnapper.ClampToWorkArea();
             }
             finally
             {
@@ -1132,6 +1240,11 @@ namespace CodexUsageMonitor
             }
         }
 
+        private bool IsContextMenuOpen
+        {
+            get { return WindowSurface.ContextMenu != null && WindowSurface.ContextMenu.IsOpen; }
+        }
+
         private WindowDockEdge GetStoredDockEdge()
         {
             if (dockedHorizontalEdge.HasValue)
@@ -1164,11 +1277,12 @@ namespace CodexUsageMonitor
             DependencyObject source = eventArgs.OriginalSource as DependencyObject;
             while (source != null)
             {
-                if (source is Button)
+                if (source is ButtonBase || source is TextBoxBase || source is Selector ||
+                    source is ScrollBar || source is ChatPanel)
                 {
                     return;
                 }
-                source = System.Windows.Media.VisualTreeHelper.GetParent(source);
+                source = source is Visual ? VisualTreeHelper.GetParent(source) : LogicalTreeHelper.GetParent(source);
             }
 
             if (compactMode && eventArgs.ClickCount >= 2)
@@ -1179,67 +1293,113 @@ namespace CodexUsageMonitor
                 return;
             }
 
-            if (eventArgs.LeftButton == MouseButtonState.Pressed)
+            dragStart = eventArgs.GetPosition(this);
+            expandTimer.Stop();
+            collapseTimer.Stop();
+            // Capture on the same element that receives move/up events.
+            if (!DragSurface.CaptureMouse()) dragStart = null;
+            eventArgs.Handled = true;
+        }
+
+        private void CancelPendingDrag()
+        {
+            dragStart = null;
+            if (DragSurface.IsMouseCaptured) DragSurface.ReleaseMouseCapture();
+        }
+
+        private void WindowSurface_LostMouseCapture(object sender, MouseEventArgs args)
+        {
+            if (DragSurface.IsMouseCaptured) return;
+            dragStart = null;
+            if (!isDragging) ScheduleCompactMode();
+        }
+
+        private void WindowSurface_MouseLeftButtonUp(object sender, MouseButtonEventArgs args)
+        {
+            if (!dragStart.HasValue) return;
+            CancelPendingDrag();
+            if (compactMode && IsMouseOver && !waitForHoverExit) expandTimer.Start();
+            else ScheduleCompactMode();
+            args.Handled = true;
+        }
+
+        private void WindowSurface_MouseMove(object sender, MouseEventArgs eventArgs)
+        {
+            if (!dragStart.HasValue || isDragging) return;
+            if (eventArgs.LeftButton != MouseButtonState.Pressed)
             {
-                collapseTimer.Stop();
+                CancelPendingDrag();
+                return;
+            }
+            System.Windows.Point current = eventArgs.GetPosition(this);
+            if (Math.Abs(current.X - dragStart.Value.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(current.Y - dragStart.Value.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+            Vector initialMovement = current - dragStart.Value;
+            isDragging = true;
+            CancelPendingDrag();
+            FullPanel.BeginAnimation(OpacityProperty, null);
+            expandTimer.Stop();
+            collapseTimer.Stop();
+            eventArgs.Handled = true;
 
-                bool wasDocked = HasDockEdges;
-                bool wasCompact = compactMode;
-                WindowDockEdge? originalHorizontalEdge =
-                    dockedHorizontalEdge;
-                WindowDockEdge? originalVerticalEdge =
-                    dockedVerticalEdge;
-                isDragging = true;
-                edgeSnapper.Suppressed = wasDocked;
-                try
-                {
-                    DragMove();
-                }
-                finally
-                {
-                    edgeSnapper.Suppressed = false;
-                    isDragging = false;
-                }
+            bool wasDocked = HasDockEdges;
+            bool wasCompact = compactMode;
+            WindowDockEdge? originalHorizontalEdge =
+                dockedHorizontalEdge;
+            WindowDockEdge? originalVerticalEdge =
+                dockedVerticalEdge;
+            edgeSnapper.Suppressed = wasDocked;
+            try
+            {
+                // Preserve motion already received before entering the native move loop.
+                Left += initialMovement.X;
+                Top += initialMovement.Y;
+                if (Mouse.LeftButton == MouseButtonState.Pressed) DragMove();
+            }
+            finally
+            {
+                edgeSnapper.Suppressed = false;
+                isDragging = false;
+            }
 
-                bool snapped = false;
-                if (edgeSnapper.Enabled)
-                {
-                    snapped = wasDocked
-                        ? edgeSnapper.DetectDockEdges(10)
-                        : edgeSnapper.DetectDockEdges(10) ||
-                            edgeSnapper.SnapNow(true);
-                }
+            bool snapped = false;
+            if (edgeSnapper.Enabled)
+            {
+                snapped = wasDocked
+                    ? edgeSnapper.DetectDockEdges(10)
+                    : edgeSnapper.DetectDockEdges(10) ||
+                        edgeSnapper.SnapNow(true);
+            }
 
-                if (snapped)
+            if (snapped)
+            {
+                CaptureDockEdges();
+                FetchedText.Text =
+                    "已吸附到屏幕" + GetLastSnapEdgeName();
+                EnterCompactMode();
+            }
+            else
+            {
+                bool detached = wasDocked;
+                ClearDockEdges();
+                if (detached && wasCompact)
                 {
-                    CaptureDockEdges();
-                    FetchedText.Text =
-                        "已吸附到屏幕" + GetLastSnapEdgeName();
-                    EnterCompactMode();
+                    ShowExpandedPanelDetached(
+                        originalHorizontalEdge,
+                        originalVerticalEdge);
                 }
                 else
                 {
-                    bool detached = wasDocked;
-                    ClearDockEdges();
-                    if (detached && wasCompact)
-                    {
-                        ShowExpandedPanelDetached(
-                            originalHorizontalEdge,
-                            originalVerticalEdge);
-                    }
-                    else
-                    {
-                        ShowExpandedPanel();
-                    }
-                    edgeSnapper.ClampToWorkArea();
-                    if (detached)
-                    {
-                        FetchedText.Text = "已脱离屏幕边缘";
-                    }
+                    ShowExpandedPanel();
                 }
-
-                SaveSettings();
+                edgeSnapper.ClampToWorkArea();
+                if (detached)
+                {
+                    FetchedText.Text = "已脱离屏幕边缘";
+                }
             }
+
+            SaveSettings();
         }
 
         private void DockLeftMenuItem_Click(
@@ -1270,12 +1430,18 @@ namespace CodexUsageMonitor
             DockToEdge(WindowDockEdge.Bottom);
         }
 
-        private void DockToEdge(WindowDockEdge edge)
+        private void DockToEdge(WindowDockEdge edge, double? anchorRatio = null)
         {
+            edgeSnapper.ResetDockAnchor();
             if (!edgeSnapper.DockTo(edge))
             {
                 return;
             }
+
+            edgeSnapper.Enabled = true;
+            settings.EdgeSnapEnabled = true;
+            edgeSnapMenuItem.Checked = true;
+            edgeSnapper.RestoreDockAnchor(edge, anchorRatio);
 
             dockedHorizontalEdge =
                 edge == WindowDockEdge.Left ||
@@ -1360,6 +1526,10 @@ namespace CodexUsageMonitor
             settings.TopMost = Topmost;
             settings.Theme = currentTheme.ToString();
             settings.EdgeSnapEnabled = edgeSnapper.Enabled;
+            settings.ChatView = chatMode;
+            settings.CodexDataDirectory = ChatView.DataDirectory;
+            settings.DockEdge = HasDockEdges ? GetStoredDockEdge().ToString() : null;
+            settings.DockAnchorRatio = HasDockEdges ? edgeSnapper.GetDockAnchorRatio() : null;
             settingsStore.Save(settings);
         }
     }

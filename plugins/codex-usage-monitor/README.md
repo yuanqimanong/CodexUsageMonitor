@@ -1,41 +1,29 @@
 # Codex Usage Monitor plugin
 
-This Codex plugin controls the bundled Windows desktop companion. It does not add an account,
-network service, browser extension, or authentication flow.
+A small Windows desktop panel for Codex quota, response speed and Token usage.
 
-## Requirements
+## Get started
 
-- Windows 10 or Windows 11, x64
-- Codex Desktop installed and signed in for the current Windows user
-- `assets/CodexUsageMonitor.exe`, `assets/icon.png`, and `assets/logo.png` present in the package
+Use the complete plugin ZIP from the project's GitHub Releases. It includes the desktop app. You need Windows 10 or 11 x64 and Codex Desktop. Sign in to Codex to view your remaining quota.
 
-## Bundled operations
+After installing or updating the plugin, start a new Codex chat and ask it to start Codex Usage Monitor. You can also ask it to check the running status, stop the monitor, or turn start-with-Windows on or off.
 
-The scripts resolve all files relative to the plugin directory. They do not contain a user name,
-an installation-version hash, or an absolute path copied from a build computer.
+## Use the panel
 
-```powershell
-.\scripts\Start-CodexUsageMonitor.ps1
-.\scripts\Get-CodexUsageMonitorStatus.ps1
-.\scripts\Set-CodexUsageMonitorStartup.ps1 -Enabled $true
-.\scripts\Stop-CodexUsageMonitor.ps1
-```
+Move the pointer over the tab at the screen edge to expand it. Choose **会话** to see running sessions as a single scrolling list of cards. Each card shows the session name, model, status, latest measured Token/s and cumulative input, cached input, output and reasoning output.
 
-`Get-CodexUsageMonitorStatus.ps1` returns `ProcessIds` as an array. Use `-AsJson` for
-machine-readable output.
+The **额度** tab shows remaining quota and reset times. Click `◇` to keep the panel open. Drag the header to move it, or use the tray menu to change its theme, toggle edge snapping or exit. All themes use opaque backgrounds for readability.
 
-Enabling start-with-Windows refuses to overwrite an existing `CodexUsageMonitor` Run value that
-points somewhere else. Intentional takeover and restoration are package-install operations; use the
-repository installer with `-ForceStartupReplace` instead of overwriting the registry value manually.
+Cards refresh every three seconds while visible. Completed, interrupted, deleted, archived and background review sessions are filtered out. Sessions with no new records for five minutes are hidden until their logs update again. A long-running tool or reasoning step may therefore disappear temporarily.
 
-## Privacy boundary
+Speed updates after completed model calls and uses client-observed timing. Missing measurements appear as `—`. Cached input is included in input, and reasoning output is included in output.
 
-The companion asks the locally installed `codex app-server` for rate-limit windows under the
-current Codex Desktop session. The plugin must never read or export cookies, OAuth tokens, API
-keys, browser storage, or another Windows user's profile. See the repository-level
-`docs/PRIVACY.md` for the complete boundary.
+## Local data
 
-## Packaging
+The panel reads `CODEX_HOME`, or the current user's `.codex` folder by default. Use **数据目录** to choose a folder containing `state_*.sqlite` and `sessions`. The current session catalog is opened read-only through Windows' built-in SQLite. The panel follows recent JSONL logs for active sessions. Compressed records are not supported yet.
 
-The release plugin contains the optimized EXE and public image assets only. Build directories,
-settings, logs, account data, and `.pdb` symbol files are not part of the plugin archive.
+Session names and metrics stay on your computer. The parser passes over log lines containing messages and tool results without keeping their contents. Quota comes from the locally installed `codex app-server`, which uses Codex's normal connection. Check session names before sharing screenshots.
+
+## Update or remove
+
+Install the latest complete plugin package and start a new Codex chat. To remove the plugin, use Codex's plugin management screen. Exit the desktop panel from its tray menu when you are finished.

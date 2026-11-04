@@ -34,6 +34,95 @@ namespace CodexUsageMonitor
         private bool disposed;
         private bool enabled;
         private bool suppressed;
+        private double? dockAnchor;
+        private IntPtr anchorMonitor;
+        private WindowDockEdge? anchorEdge;
+
+        public void ResetDockAnchor()
+        {
+            dockAnchor = null;
+        }
+
+        public double GetAvailableHeight()
+        {
+            NativeRect workArea;
+            if (handle == IntPtr.Zero || !TryGetWorkArea(MonitorFromWindow(handle, MonitorDefaultToNearest), out workArea))
+                return SystemParameters.WorkArea.Height;
+            return (workArea.Bottom - workArea.Top) / GetDpiScale() + visibleSurfaceMargin.Top + visibleSurfaceMargin.Bottom;
+        }
+
+        public double? GetDockAnchorRatio()
+        {
+            NativeRect workArea;
+            if (!dockAnchor.HasValue || !anchorEdge.HasValue || !TryGetWorkArea(anchorMonitor, out workArea)) return null;
+            bool horizontal = anchorEdge == WindowDockEdge.Left || anchorEdge == WindowDockEdge.Right;
+            double start = horizontal ? workArea.Top : workArea.Left;
+            double length = horizontal ? workArea.Bottom - workArea.Top : workArea.Right - workArea.Left;
+            return length > 0 ? (double?)Math.Max(0, Math.Min(1, (dockAnchor.Value - start) / length)) : null;
+        }
+
+        public void RestoreDockAnchor(WindowDockEdge edge, double? ratio)
+        {
+            if (!ratio.HasValue || double.IsNaN(ratio.Value) || double.IsInfinity(ratio.Value)) return;
+            NativeRect workArea;
+            IntPtr monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+            if (!TryGetWorkArea(monitor, out workArea)) return;
+            bool horizontal = edge == WindowDockEdge.Left || edge == WindowDockEdge.Right;
+            double start = horizontal ? workArea.Top : workArea.Left;
+            double length = horizontal ? workArea.Bottom - workArea.Top : workArea.Right - workArea.Left;
+            dockAnchor = start + Math.Max(0, Math.Min(1, ratio.Value)) * length;
+            anchorMonitor = monitor;
+            anchorEdge = edge;
+        }
+
+        public bool ResizeDocked(double widthDips, double heightDips, Thickness previousMargin,
+            WindowDockEdge edge)
+        {
+            NativeRect before;
+            NativeRect workArea;
+            IntPtr monitor = MonitorFromWindow(handle, MonitorDefaultToNearest);
+            if (handle == IntPtr.Zero || !GetWindowRect(handle, out before) || !TryGetWorkArea(monitor, out workArea))
+                return false;
+
+            double scale = GetDpiScale();
+            PixelInsets afterInsets = GetPixelInsets(scale);
+            bool horizontal = edge == WindowDockEdge.Left || edge == WindowDockEdge.Right;
+            if (!dockAnchor.HasValue || anchorMonitor != monitor || anchorEdge != edge)
+            {
+                dockAnchor = horizontal
+                    ? (before.Top + previousMargin.Top * scale + before.Bottom - previousMargin.Bottom * scale) / 2
+                    : (before.Left + previousMargin.Left * scale + before.Right - previousMargin.Right * scale) / 2;
+                anchorMonitor = monitor;
+                anchorEdge = edge;
+            }
+
+            int width = Math.Min((int)Math.Round(widthDips * scale), workArea.Right - workArea.Left + afterInsets.Left + afterInsets.Right);
+            int height = Math.Min((int)Math.Round(heightDips * scale), workArea.Bottom - workArea.Top + afterInsets.Top + afterInsets.Bottom);
+            int visibleWidth = width - afterInsets.Left - afterInsets.Right;
+            int visibleHeight = height - afterInsets.Top - afterInsets.Bottom;
+            int left = horizontal
+                ? (edge == WindowDockEdge.Left ? workArea.Left - afterInsets.Left : workArea.Right + afterInsets.Right - width)
+                : (int)Math.Round(dockAnchor.Value - visibleWidth / 2.0) - afterInsets.Left;
+            int top = horizontal
+                ? (int)Math.Round(dockAnchor.Value - visibleHeight / 2.0) - afterInsets.Top
+                : (edge == WindowDockEdge.Top ? workArea.Top - afterInsets.Top : workArea.Bottom + afterInsets.Bottom - height);
+            left = Math.Max(workArea.Left - afterInsets.Left, Math.Min(left, workArea.Right + afterInsets.Right - width));
+            top = Math.Max(workArea.Top - afterInsets.Top, Math.Min(top, workArea.Bottom + afterInsets.Bottom - height));
+            NativeRect target = new NativeRect { Left = left, Top = top, Right = left + width, Bottom = top + height };
+            // Commit final geometry once. Resizing the HWND every frame causes
+            // layout churn and can leave the compact surface stretched on interruption.
+            ApplyBounds(target, scale);
+            return true;
+        }
+
+        private void ApplyBounds(NativeRect rectangle, double scale)
+        {
+            window.Width = (rectangle.Right - rectangle.Left) / scale;
+            window.Height = (rectangle.Bottom - rectangle.Top) / scale;
+            SetWindowPos(handle, IntPtr.Zero, rectangle.Left, rectangle.Top,
+                rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top,
+                SetWindowPosNoZOrder | SetWindowPosNoActivate);
+        }
 
         public WindowEdgeSnapper(
             Window window,
@@ -338,7 +427,8 @@ namespace CodexUsageMonitor
             double widthDips,
             double heightDips,
             WindowDockEdge? horizontalEdge,
-            WindowDockEdge? verticalEdge)
+            WindowDockEdge? verticalEdge,
+            Thickness previousMargin)
         {
             if (handle == IntPtr.Zero)
             {
@@ -353,7 +443,10 @@ namespace CodexUsageMonitor
                 return false;
             }
 
+            Thickness targetMargin = visibleSurfaceMargin;
+            visibleSurfaceMargin = previousMargin;
             PixelInsets beforeInsets = GetPixelInsets();
+            visibleSurfaceMargin = targetMargin;
             int beforeVisibleLeft = before.Left + beforeInsets.Left;
             int beforeVisibleRight = before.Right - beforeInsets.Right;
             int beforeVisibleTop = before.Top + beforeInsets.Top;
@@ -662,6 +755,17 @@ namespace CodexUsageMonitor
                 PrimaryDockEdge = horizontalScore <= verticalScore
                     ? LastHorizontalEdge
                     : LastVerticalEdge;
+                // Magnetize only the chosen edge. Locking both axes makes corners sticky.
+                if (PrimaryDockEdge == LastHorizontalEdge)
+                {
+                    deltaY = 0;
+                    LastVerticalEdge = null;
+                }
+                else
+                {
+                    deltaX = 0;
+                    LastHorizontalEdge = null;
+                }
             }
             else
             {

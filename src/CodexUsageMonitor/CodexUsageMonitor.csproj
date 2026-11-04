@@ -69,6 +69,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="ChatPanel.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Themes\Cyberpunk.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -86,9 +90,15 @@
     </Compile>
     <Compile Include="AppServerClient.cs" />
     <Compile Include="BuildInfo.cs" />
+    <Compile Include="ChatPanel.xaml.cs">
+      <DependentUpon>ChatPanel.xaml</DependentUpon>
+    </Compile>
     <Compile Include="CodexLocator.cs" />
     <Compile Include="GaugeIconFactory.cs" />
     <Compile Include="JsonValue.cs" />
+    <Compile Include="LocalSessionReader.cs" />
+    <Compile Include="LocalThreadCatalog.cs" />
+    <Compile Include="SessionMetrics.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>

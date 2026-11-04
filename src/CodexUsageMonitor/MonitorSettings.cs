@@ -14,6 +14,10 @@ namespace CodexUsageMonitor
         public bool TopMost { get; set; }
         public string Theme { get; set; }
         public bool? EdgeSnapEnabled { get; set; }
+        public string CodexDataDirectory { get; set; }
+        public bool ChatView { get; set; }
+        public string DockEdge { get; set; }
+        public double? DockAnchorRatio { get; set; }
 
         public static MonitorSettings CreateDefault()
         {
