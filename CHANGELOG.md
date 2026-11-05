@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-11-05
 
+- Added running-session cards with response speed, input, cached input, output and reasoning Token totals, using the current Codex sidebar names and filtering removed sessions.
+- Made session lists grow with one to five cards and scroll beyond five, with scrolling also available on short displays.
 - Made expanded cards snap on release after overshooting a screen edge, while retaining easy inward dragging of compact handles.
 - Fixed stretched compact surfaces and oversized content when moving between monitors with different DPI settings.
 - Enabled WPF per-monitor rendering on supported runtimes and aligned native sizing with the actual WPF transform.

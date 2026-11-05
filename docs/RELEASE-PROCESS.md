@@ -112,14 +112,14 @@ if ($signature.Status -ne 'Valid') {
 推荐流程是创建并推送版本 tag，由仓库的 tag Release workflow 构建并上传资产：
 
 ```powershell
-git tag -a v1.1.0 -m 'Codex Usage Monitor v1.1.0'
-git push origin v1.1.0
+git tag -a v1.2.0 -m 'Codex Usage Monitor v1.2.0'
+git push origin v1.2.0
 ```
 
 如需手动发布，先在仓库外创建版本说明文件。以下命令把四个最终产物上传到新 Release：
 
 ```powershell
-$tag = 'v1.1.0'
+$tag = 'v1.2.0'
 $notes = Join-Path $env:TEMP 'CodexUsageMonitor-release-notes.md'
 
 gh release create $tag `

@@ -64,6 +64,7 @@ namespace CodexUsageMonitor
         public MainWindow()
         {
             InitializeComponent();
+            VersionText.Text = "v" + BuildInfo.Version;
 
             settingsStore = new SettingsStore();
             settings = settingsStore.Load();
