@@ -2,11 +2,14 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
+using Forms = System.Windows.Forms;
 using CodexUsageMonitor;
 
 internal static class WindowInteractionTests
@@ -34,6 +37,7 @@ internal static class WindowInteractionTests
             CheckCaptureCleanup(window);
             CheckCardScrolling(window);
             CheckDockActions(window);
+            CheckMonitorDpi(window);
             Console.WriteLine("PASS " + checks + " window regression checks");
             return 0;
         }
@@ -75,7 +79,7 @@ internal static class WindowInteractionTests
                     "Original semicircle geometry on " + edge);
                 Require(border.CornerRadius == corners[i], "Straight edge faces screen edge on " + edge);
                 Call(window, "ShowExpandedPanel");
-                Require(window.Width == 392 && window.Height == 286, "Expanded quota geometry on " + edge);
+                Require(window.Width == 520 && window.Height == 326, "Expanded quota geometry on " + edge);
             }
             Pass("stable compact/expanded geometry on " + edge);
         }
@@ -155,6 +159,8 @@ internal static class WindowInteractionTests
     private static void CheckCardScrolling(MainWindow window)
     {
         ((Button)window.FindName("ChatTab")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Call(window, "ShowExpandedPanel");
+        bool hasHandle = new WindowInteropHelper(window).Handle != IntPtr.Zero;
         ChatPanel panel = (ChatPanel)window.FindName("ChatView");
         IList cards = (IList)Field(panel, "cards").GetValue(panel);
         Type cardType = typeof(ChatPanel).Assembly.GetType("CodexUsageMonitor.SessionCard");
@@ -175,9 +181,14 @@ internal static class WindowInteractionTests
             }
             ((FrameworkElement)panel.FindName("EmptyState")).Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
             Call(panel, "UpdateContentHeight");
-            panel.Measure(new Size(490, panel.PreferredHeight));
-            panel.Arrange(new Rect(0, 0, 490, panel.PreferredHeight));
-            panel.UpdateLayout();
+            if (hasHandle)
+                ArrangeRoot(window, (Grid)window.FindName("DragSurface"));
+            else
+            {
+                panel.Measure(new Size(490, panel.PreferredHeight));
+                panel.Arrange(new Rect(0, 0, 490, panel.PreferredHeight));
+                panel.UpdateLayout();
+            }
             Require(count > 5 ? scroller.ScrollableHeight > 0.5 : scroller.ScrollableHeight <= 0.5,
                 "Scroll threshold failed with " + count + " cards; extent=" + scroller.ExtentHeight +
                 ", viewport=" + scroller.ViewportHeight + ", panel=" + panel.ActualHeight + ", preferred=" + panel.PreferredHeight);
@@ -188,12 +199,174 @@ internal static class WindowInteractionTests
             previousHeight = panel.PreferredHeight;
         }
         // On a short display, all cards remain reachable even when fewer than five fit.
-        panel.Measure(new Size(490, 180));
-        panel.Arrange(new Rect(0, 0, 490, 180));
-        panel.UpdateLayout();
+        if (hasHandle)
+        {
+            window.Height = 250;
+            ArrangeRoot(window, (Grid)window.FindName("DragSurface"));
+        }
+        else
+        {
+            panel.Measure(new Size(490, 180));
+            panel.Arrange(new Rect(0, 0, 490, 180));
+            panel.UpdateLayout();
+        }
         Require(scroller.ScrollableHeight > 0.5, "Short displays clipped cards instead of allowing scrolling");
+        Call(window, "ShowExpandedPanel");
         Pass("adaptive card height and scrolling after five cards");
     }
+
+    private static void CheckMonitorDpi(MainWindow window)
+    {
+        IntPtr handle = new WindowInteropHelper(window).EnsureHandle();
+        object snapper = Field(window, "edgeSnapper").GetValue(window);
+        Type edgeType = window.GetType().Assembly.GetType("CodexUsageMonitor.WindowDockEdge");
+        Grid root = (Grid)window.FindName("DragSurface");
+        Border border = (Border)window.FindName("SurfaceBorder");
+        // Only move our hidden HWND; never capture input or alter the user's window.
+        for (int trip = 0; trip < 2; trip++)
+        foreach (Forms.Screen screen in Forms.Screen.AllScreens)
+        {
+            Call(window, "ClearDockEdges");
+            var area = screen.WorkingArea;
+            SetWindowPos(handle, IntPtr.Zero, area.Left + 100, area.Top + 100, 0, 0, 0x15);
+            Pump();
+            Matrix transform = HwndSource.FromHwnd(handle).CompositionTarget.TransformToDevice;
+            double scale = GetDpiForWindow(handle) / 96.0;
+            Require(Math.Abs(transform.M11 - scale) < 0.001 && Math.Abs(transform.M22 - scale) < 0.001,
+                "WPF must follow monitor DPI on " + screen.DeviceName + "; native=" + scale + ", WPF=" + transform.M11);
+            CheckCardScrolling(window);
+
+            CheckDropOverflow(window, screen, scale);
+
+            foreach (string edge in new[] { "Left", "Right", "Top", "Bottom" })
+            {
+                bool horizontal = edge == "Left" || edge == "Right";
+                object value = Enum.Parse(edgeType, edge);
+                Field(window, "dockedHorizontalEdge").SetValue(window, horizontal ? value : null);
+                Field(window, "dockedVerticalEdge").SetValue(window, horizontal ? null : value);
+                snapper.GetType().GetMethod("ResetDockAnchor").Invoke(snapper, null);
+                for (int cycle = 0; cycle < 3; cycle++)
+                {
+                    Call(window, "EnterCompactMode");
+                    Pump();
+                    CheckNativeSize(window, handle, scale, horizontal ? 42 : 64, horizontal ? 64 : 42);
+                    ArrangeRoot(window, root);
+                    Require(Math.Abs(border.ActualWidth - (horizontal ? 30 : 52)) < 1 &&
+                        Math.Abs(border.ActualHeight - (horizontal ? 52 : 30)) < 1,
+                        "Semicircle stretched on " + screen.DeviceName + " " + edge);
+                    NativeRect rect;
+                    GetWindowRect(handle, out rect);
+                    double gap = edge == "Left" ? rect.Left + 6 * scale - area.Left :
+                        edge == "Right" ? rect.Right - 6 * scale - area.Right :
+                        edge == "Top" ? rect.Top + 6 * scale - area.Top : rect.Bottom - 6 * scale - area.Bottom;
+                    Require(Math.Abs(gap) <= 1, "Visible compact edge left the work area");
+
+                    foreach (string tab in new[] { "QuotaTab", "ChatTab" })
+                    {
+                        ((Button)window.FindName(tab)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Call(window, "ShowExpandedPanel");
+                        Pump();
+                        double available = (double)snapper.GetType().GetMethod("GetAvailableHeight").Invoke(snapper, null);
+                        Thickness surfaceMargin = ((Grid)window.FindName("WindowSurface")).Margin;
+                        double chromeHeight = ((Grid)window.FindName("FullPanel")).RowDefinitions[0].Height.Value +
+                            surfaceMargin.Top + surfaceMargin.Bottom + border.BorderThickness.Top + border.BorderThickness.Bottom;
+                        double height = tab == "QuotaTab" ? 326 : Math.Min(
+                            ((ChatPanel)window.FindName("ChatView")).PreferredHeight + chromeHeight, available);
+                        CheckNativeSize(window, handle, scale, 520, height);
+                        ArrangeRoot(window, root);
+                        Require(Math.Abs(border.ActualWidth - 492) <= 1, "Tabs must have equal visible width");
+                        Require(root.ActualWidth >= border.ActualWidth, "Content exceeded native window");
+                    }
+                }
+            }
+            Pass("mixed-DPI round trip " + (trip + 1) + " on " + screen.DeviceName + " at " + (scale * 100) + "%");
+        }
+        if (Forms.Screen.AllScreens.Length < 2)
+            Console.WriteLine("NOTE Only one display is connected; cross-monitor coverage requires a mixed-DPI desktop.");
+    }
+
+    private static void CheckDropOverflow(MainWindow window, Forms.Screen screen, double scale)
+    {
+        object snapper = Field(window, "edgeSnapper").GetValue(window);
+        MethodInfo apply = snapper.GetType().GetMethod("ApplySnap", PrivateInstance);
+        Type rectType = apply.GetParameters()[0].ParameterType.GetElementType();
+        var area = screen.WorkingArea;
+        int margin = (int)Math.Round(14 * scale);
+        int width = (int)Math.Round(520 * scale);
+        int height = (int)Math.Round(326 * scale);
+        foreach (string edge in new[] { "Left", "Right", "Top", "Bottom" })
+        foreach (int gapDips in new[] { -96, -32, -8, 0, 16, 40 })
+        foreach (bool release in new[] { false, true })
+        {
+            int gap = (int)Math.Round(gapDips * scale);
+            int left = area.Left + (area.Width - width) / 2;
+            int top = area.Top + (area.Height - height) / 2;
+            if (edge == "Left") left = area.Left + gap - margin;
+            if (edge == "Right") left = area.Right - gap + margin - width;
+            if (edge == "Top") top = area.Top + gap - margin;
+            if (edge == "Bottom") top = area.Bottom - gap + margin - height;
+            object rect = Activator.CreateInstance(rectType);
+            rectType.GetField("Left").SetValue(rect, left);
+            rectType.GetField("Right").SetValue(rect, left + width);
+            rectType.GetField("Top").SetValue(rect, top);
+            rectType.GetField("Bottom").SetValue(rect, top + height);
+            // Supply geometry without moving the user's pointer. Live movement
+            // must remain non-sticky; release accepts an overshot visible edge.
+            object[] arguments = { rect, false, false, release };
+            bool snapped = (bool)apply.Invoke(snapper, arguments);
+            bool expected = release ? gapDips <= 24 : Math.Abs(gapDips) <= 24;
+            Require(snapped == expected, "Drop tolerance failed on " + edge + ", gap=" + gapDips + ", release=" + release);
+            object primary = snapper.GetType().GetProperty("PrimaryDockEdge").GetValue(snapper, null);
+            if (!expected)
+            {
+                Require(primary == null, "Dragging inward retained a stale dock edge");
+                continue;
+            }
+            Require(primary != null && primary.ToString() == edge, "Drop picked the wrong edge");
+            object target = arguments[0];
+            int coordinate = (int)rectType.GetField(edge).GetValue(target);
+            int expectedCoordinate = edge == "Left" ? area.Left - margin : edge == "Right" ? area.Right + margin :
+                edge == "Top" ? area.Top - margin : area.Bottom + margin;
+            Require(coordinate == expectedCoordinate, "Drop did not align the visible surface");
+        }
+        Pass("release accepts edge overflow while inward movement detaches on " + screen.DeviceName);
+    }
+
+    private static void CheckNativeSize(MainWindow window, IntPtr handle, double scale, double width, double height)
+    {
+        NativeRect rect;
+        Require(GetWindowRect(handle, out rect), "Native window bounds unavailable");
+        Require(Math.Abs(rect.Right - rect.Left - width * scale) <= 1 &&
+            Math.Abs(rect.Bottom - rect.Top - height * scale) <= 1,
+            "Native size does not match content: " + (rect.Right - rect.Left) + "x" + (rect.Bottom - rect.Top) +
+            ", expected=" + width * scale + "x" + height * scale);
+        Require(Math.Abs(window.Width - width) <= 1 / scale && Math.Abs(window.Height - height) <= 1 / scale,
+            "DPI transition changed logical window dimensions");
+    }
+
+    private static void ArrangeRoot(MainWindow window, Grid root)
+    {
+        root.Measure(new Size(window.Width, window.Height));
+        root.Arrange(new Rect(0, 0, window.Width, window.Height));
+        root.UpdateLayout();
+    }
+
+    private static void Pump()
+    {
+        DispatcherFrame frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+            new Action(delegate { frame.Continue = false; }));
+        Dispatcher.PushFrame(frame);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr handle, out NativeRect rect);
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr handle);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int width, int height, uint flags);
 
     private static FieldInfo Field(object target, string name)
     {

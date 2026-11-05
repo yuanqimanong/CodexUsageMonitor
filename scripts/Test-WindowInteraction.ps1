@@ -13,6 +13,7 @@ Copy-Item -LiteralPath $application -Destination $output -Force
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $executable = Join-Path $output 'WindowInteractionTests.exe'
 $arguments = @('/nologo', '/target:exe', '/platform:x64', "/out:$executable", "/r:$application")
+$arguments += '/win32manifest:' + (Join-Path $repository 'src\CodexUsageMonitor\app.manifest')
 $referenceRoot = Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.0'
 foreach ($assembly in @('WindowsBase', 'PresentationCore', 'PresentationFramework', 'System.Xaml')) {
     $arguments += '/r:' + (Join-Path $referenceRoot "$assembly.dll")

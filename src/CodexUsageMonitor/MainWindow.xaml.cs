@@ -17,9 +17,8 @@ namespace CodexUsageMonitor
 {
     public partial class MainWindow : Window
     {
-        private const double FullWindowWidth = 392;
-        private const double FullWindowHeight = 286;
-        private const double ChatWindowWidth = 520;
+        private const double ExpandedWindowWidth = 520;
+        private const double QuotaWindowHeight = 326;
         private const double FullSurfaceMargin = 14;
         private const double FullCornerRadius = 14;
         private const double CompactSurfaceMargin = 6;
@@ -78,6 +77,7 @@ namespace CodexUsageMonitor
                 24);
             edgeSnapper.Enabled = settings.EdgeSnapEnabled != false;
             edgeSnapper.MoveCompleted += EdgeSnapper_MoveCompleted;
+            edgeSnapper.DpiChanged += EdgeSnapper_DpiChanged;
 
             service = new UsageMonitorService();
             service.SnapshotChanged += Service_SnapshotChanged;
@@ -103,7 +103,7 @@ namespace CodexUsageMonitor
             ChatView.ContentHeightChanged += delegate
             {
                 if (chatMode && !compactMode && !isDragging && Math.Abs(Height - ExpandedHeight) > 0.5)
-                    ApplyWindowSize(ExpandedWidth, ExpandedHeight, WindowSurface.Margin);
+                    ApplyWindowSize(ExpandedWindowWidth, ExpandedHeight, WindowSurface.Margin);
             };
 
             trayIcon = new Forms.NotifyIcon();
@@ -260,6 +260,7 @@ namespace CodexUsageMonitor
             ChatView.Dispose();
             SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
             edgeSnapper.MoveCompleted -= EdgeSnapper_MoveCompleted;
+            edgeSnapper.DpiChanged -= EdgeSnapper_DpiChanged;
             edgeSnapper.Dispose();
 
             service.SnapshotChanged -= Service_SnapshotChanged;
@@ -354,7 +355,7 @@ namespace CodexUsageMonitor
                     edgeSnapper.ResetDockAnchor();
                     if (chatMode && !compactMode)
                     {
-                        ApplyWindowSize(ExpandedWidth, ExpandedHeight, WindowSurface.Margin);
+                        ApplyWindowSize(ExpandedWindowWidth, ExpandedHeight, WindowSurface.Margin);
                     }
                     else if (HasDockEdges)
                     {
@@ -913,16 +914,32 @@ namespace CodexUsageMonitor
             }
         }
 
-        private double ExpandedWidth { get { return chatMode ? ChatWindowWidth : FullWindowWidth; } }
         private double ExpandedHeight
         {
             get
             {
-                if (!chatMode) return FullWindowHeight;
+                if (!chatMode) return QuotaWindowHeight;
                 double height = ChatView.PreferredHeight + FullPanel.RowDefinitions[0].Height.Value +
                     SurfaceBorder.BorderThickness.Top + SurfaceBorder.BorderThickness.Bottom + FullSurfaceMargin * 2;
                 return Math.Min(height, edgeSnapper.GetAvailableHeight());
             }
+        }
+
+        private void EdgeSnapper_DpiChanged(object sender, EventArgs args)
+        {
+            if (exiting || isDragging || isProgrammaticLayout) return;
+            double width;
+            double height;
+            if (compactMode)
+            {
+                ConfigureCompactSurface(GetStoredDockEdge(), out width, out height);
+            }
+            else
+            {
+                width = ExpandedWindowWidth;
+                height = ExpandedHeight;
+            }
+            ApplyWindowSize(width, height, WindowSurface.Margin);
         }
 
         private void QuotaTab_Click(object sender, RoutedEventArgs args) { SetActiveView(false); }
@@ -1089,7 +1106,7 @@ namespace CodexUsageMonitor
                 ? Visibility.Visible
                 : Visibility.Collapsed;
             ConfigureFullSurface();
-            ApplyWindowSize(ExpandedWidth, ExpandedHeight, previousMargin);
+            ApplyWindowSize(ExpandedWindowWidth, ExpandedHeight, previousMargin);
             if (wasCompact && initialized && IsVisible && SystemParameters.ClientAreaAnimation)
             {
                 FullPanel.BeginAnimation(OpacityProperty, new DoubleAnimation(0.65, 1,
@@ -1112,13 +1129,13 @@ namespace CodexUsageMonitor
             try
             {
                 if (!edgeSnapper.ResizePreservingEdgeOffsets(
-                    ExpandedWidth,
+                    ExpandedWindowWidth,
                     ExpandedHeight,
                     originalHorizontalEdge,
                     originalVerticalEdge,
                     previousMargin))
                 {
-                    Width = ExpandedWidth;
+                    Width = ExpandedWindowWidth;
                     Height = ExpandedHeight;
                     UpdateLayout();
                 }
@@ -1365,10 +1382,11 @@ namespace CodexUsageMonitor
             bool snapped = false;
             if (edgeSnapper.Enabled)
             {
-                snapped = wasDocked
+                // Expanded cards may overshoot the edge before release. Compact
+                // handles retain the narrow tolerance for easy inward detaching.
+                snapped = wasCompact
                     ? edgeSnapper.DetectDockEdges(10)
-                    : edgeSnapper.DetectDockEdges(10) ||
-                        edgeSnapper.SnapNow(true);
+                    : edgeSnapper.SnapAfterMove();
             }
 
             if (snapped)
