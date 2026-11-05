@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace CodexUsageMonitor
 {
@@ -14,13 +15,13 @@ namespace CodexUsageMonitor
     }
 
     /// <summary>
-    /// Implements live, per-monitor edge snapping in the native window-move loop.
-    /// All geometry in the hook stays in physical pixels to avoid mixed-DPI drift.
+    /// Snaps native window bounds in physical pixels using WPF's rendering scale.
     /// </summary>
     internal sealed class WindowEdgeSnapper : IDisposable
     {
         private const int WindowMoving = 0x0216;
         private const int WindowExitSizeMove = 0x0232;
+        private const int WindowDpiChanged = 0x02E0;
         private const uint MonitorDefaultToNearest = 2;
         private const uint SetWindowPosNoSize = 0x0001;
         private const uint SetWindowPosNoZOrder = 0x0004;
@@ -37,6 +38,7 @@ namespace CodexUsageMonitor
         private double? dockAnchor;
         private IntPtr anchorMonitor;
         private WindowDockEdge? anchorEdge;
+        private bool dpiChangePending;
 
         public void ResetDockAnchor()
         {
@@ -139,6 +141,7 @@ namespace CodexUsageMonitor
         }
 
         public event EventHandler MoveCompleted;
+        public event EventHandler DpiChanged;
 
         public WindowDockEdge? LastHorizontalEdge { get; private set; }
 
@@ -166,10 +169,15 @@ namespace CodexUsageMonitor
 
         public bool SnapNow()
         {
-            return SnapNow(false);
+            return TrySnapNow(false, false);
         }
 
-        public bool SnapNow(bool preferCursorMonitor)
+        public bool SnapAfterMove()
+        {
+            return TrySnapNow(true, true);
+        }
+
+        private bool TrySnapNow(bool preferCursorMonitor, bool acceptCrossedEdges)
         {
             if (!enabled || suppressed || handle == IntPtr.Zero)
             {
@@ -181,7 +189,8 @@ namespace CodexUsageMonitor
                 !ApplySnap(
                     ref rectangle,
                     preferCursorMonitor,
-                    preferCursorMonitor))
+                    preferCursorMonitor,
+                    acceptCrossedEdges))
             {
                 return false;
             }
@@ -579,7 +588,11 @@ namespace CodexUsageMonitor
             IntPtr lParam,
             ref bool handled)
         {
-            if (message == WindowMoving &&
+            if (message == WindowDpiChanged)
+            {
+                QueueDpiChanged();
+            }
+            else if (message == WindowMoving &&
                 enabled &&
                 !suppressed &&
                 lParam != IntPtr.Zero)
@@ -606,10 +619,25 @@ namespace CodexUsageMonitor
             return IntPtr.Zero;
         }
 
+        private void QueueDpiChanged()
+        {
+            if (dpiChangePending) return;
+            dpiChangePending = true;
+            // WPF must update its rendering scale before we restore dock bounds.
+            window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+            {
+                dpiChangePending = false;
+                if (disposed) return;
+                EventHandler handler = DpiChanged;
+                if (handler != null) handler(this, EventArgs.Empty);
+            }));
+        }
+
         private bool ApplySnap(
             ref NativeRect rectangle,
             bool preferCursorMonitor,
-            bool allowCursorTrigger)
+            bool allowCursorTrigger,
+            bool acceptCrossedEdges = false)
         {
             LastHorizontalEdge = null;
             LastVerticalEdge = null;
@@ -641,10 +669,12 @@ namespace CodexUsageMonitor
             int visibleTop = rectangle.Top + insets.Top;
             int visibleBottom = rectangle.Bottom - insets.Bottom;
 
-            int leftDistance = Math.Abs(visibleLeft - workArea.Left);
-            int rightDistance = Math.Abs(visibleRight - workArea.Right);
-            int topDistance = Math.Abs(visibleTop - workArea.Top);
-            int bottomDistance = Math.Abs(visibleBottom - workArea.Bottom);
+            // On release, an edge outside the work area counts as reached.
+            // During movement, retain distance on both sides of the edge.
+            int leftDistance = SnapDistance(visibleLeft - workArea.Left, acceptCrossedEdges);
+            int rightDistance = SnapDistance(workArea.Right - visibleRight, acceptCrossedEdges);
+            int topDistance = SnapDistance(visibleTop - workArea.Top, acceptCrossedEdges);
+            int bottomDistance = SnapDistance(workArea.Bottom - visibleBottom, acceptCrossedEdges);
             int deltaX = 0;
             int deltaY = 0;
             bool snappedX = false;
@@ -777,6 +807,11 @@ namespace CodexUsageMonitor
             return true;
         }
 
+        private static int SnapDistance(int inwardGap, bool acceptCrossedEdges)
+        {
+            return acceptCrossedEdges ? Math.Max(0, inwardGap) : Math.Abs(inwardGap);
+        }
+
         private static bool TryGetSnapAreas(
             ref NativeRect rectangle,
             bool preferCursorMonitor,
@@ -886,18 +921,8 @@ namespace CodexUsageMonitor
 
         private double GetDpiScale()
         {
-            try
-            {
-                uint dpi = GetDpiForWindow(handle);
-                if (dpi > 0)
-                {
-                    return dpi / 96.0;
-                }
-            }
-            catch (EntryPointNotFoundException)
-            {
-            }
-
+            // Native bounds must use the same scale as WPF content. On older
+            // runtimes GetDpiForWindow can change while WPF stays at system DPI.
             if (source != null && source.CompositionTarget != null)
             {
                 double scale = source.CompositionTarget.TransformToDevice.M11;
@@ -1023,8 +1048,5 @@ namespace CodexUsageMonitor
             int width,
             int height,
             uint flags);
-
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr window);
     }
 }

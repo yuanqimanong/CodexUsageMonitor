@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:CodexUsageMonitor"
         Title="Codex Usage Monitor"
-        Width="392"
-        Height="286"
+        Width="520"
+        Height="326"
         MinWidth="36"
         MinHeight="36"
         WindowStyle="None"
@@ -57,14 +57,14 @@
             <Grid ClipToBounds="True">
               <Grid x:Name="FullPanel">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="34"/>
+                    <RowDefinition Height="40"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
-                <Grid Margin="14,5,14,0">
+                <Grid Margin="16,6,16,4">
                     <StackPanel Orientation="Horizontal">
-                        <Button x:Name="QuotaTab" Content="额度" Width="56" FontFamily="Microsoft YaHei UI" FontSize="11"
+                        <Button x:Name="QuotaTab" Content="额度" Width="60" FontFamily="Microsoft YaHei UI" FontSize="12"
                                 Style="{StaticResource ChromeButtonStyle}" Click="QuotaTab_Click"/>
-                        <Button x:Name="ChatTab" Content="会话" Width="56" FontFamily="Microsoft YaHei UI" FontSize="11"
+                        <Button x:Name="ChatTab" Content="会话" Width="60" FontFamily="Microsoft YaHei UI" FontSize="12"
                                 Style="{StaticResource ChromeButtonStyle}" Click="ChatTab_Click"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -77,163 +77,79 @@
                     </StackPanel>
                 </Grid>
                 <local:ChatPanel x:Name="ChatView" Grid.Row="1" Visibility="Collapsed"/>
-                <Grid x:Name="QuotaPanel" Grid.Row="1">
-                <Canvas IsHitTestVisible="False"
-                        Opacity="{DynamicResource ThemeDecorationOpacity}">
-                    <Line X1="0" Y1="44" X2="364" Y2="44"
-                          Stroke="{DynamicResource GlowBrush}"
-                          StrokeThickness="1"/>
-                    <Line X1="280" Y1="0" X2="364" Y2="84"
-                          Stroke="{DynamicResource GlowBrush}"
-                          StrokeThickness="1"/>
-                    <Line X1="305" Y1="0" X2="364" Y2="59"
-                          Stroke="{DynamicResource GlowBrush}"
-                          StrokeThickness="1"/>
-                    <Rectangle Canvas.Left="5"
-                               Canvas.Top="5"
-                               Width="27"
-                               Height="3"
-                               Fill="{DynamicResource GlowBrush}"/>
-                    <Rectangle Canvas.Left="335"
-                               Canvas.Top="190"
-                               Width="24"
-                               Height="3"
-                               Fill="{DynamicResource GlowBrush}"/>
-                    <TextBlock Canvas.Left="273"
-                               Canvas.Top="172"
-                               FontFamily="Consolas"
-                               FontSize="8"
-                               Foreground="{DynamicResource GlowBrush}"
-                               Text="SYS://QUOTA"/>
-                </Canvas>
-
-                <Grid Margin="18,14,18,13"
-                      TextOptions.TextFormattingMode="Display"
-                      TextOptions.TextHintingMode="Fixed"
-                      TextOptions.TextRenderingMode="Grayscale">
-                    <Grid.Resources>
-                        <Style TargetType="{x:Type TextBlock}">
-                            <Setter Property="Effect"
-                                    Value="{DynamicResource ContentLegibilityEffect}"/>
-                        </Style>
-                    </Grid.Resources>
+                <Grid x:Name="QuotaPanel" Grid.Row="1" Margin="16,8,16,12"
+                      TextOptions.TextFormattingMode="Display">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="29"/>
+                        <RowDefinition Height="*"/>
                         <RowDefinition Height="32"/>
-                        <RowDefinition Height="67"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="43"/>
-                        <RowDefinition Height="20"/>
                     </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0">
+                    <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Ellipse x:Name="StatusDot"
-                                 Width="8"
-                                 Height="8"
-                                 Margin="0,0,9,0"
-                                 Fill="{DynamicResource StatusIdleBrush}"
-                                 VerticalAlignment="Center"/>
-                        <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="CODEX"
-                                       FontFamily="Segoe UI Semibold"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"/>
-                            <TextBlock x:Name="PlanText"
-                                       Margin="7,0,0,0"
-                                       MaxWidth="68"
-                                       FontFamily="Segoe UI"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+                            <Ellipse x:Name="StatusDot" Width="7" Height="7" Margin="0,0,8,0"
+                                     Fill="{DynamicResource StatusIdleBrush}"/>
+                            <TextBlock Text="账户额度" FontFamily="Microsoft YaHei UI" FontSize="12"
+                                       FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}"/>
+                            <TextBlock x:Name="PlanText" Margin="8,1,0,0" MaxWidth="120"
+                                       FontFamily="Segoe UI" FontSize="11" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource MutedTextBrush}"/>
                         </StackPanel>
-                        <TextBlock x:Name="ConnectionText"
-                                   Grid.Column="2"
-                                   Margin="0,0,5,0"
-                                   MaxWidth="82"
-                                   VerticalAlignment="Center"
-                                   FontSize="10.5"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   Text="正在连接"
-                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="ConnectionText" Grid.Column="1" MaxWidth="160" Margin="12,1,0,0"
+                                   FontFamily="Microsoft YaHei UI" FontSize="10" Text="正在连接"
+                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource MutedTextBrush}"/>
                     </Grid>
-
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="RemainingText"
-                                   VerticalAlignment="Center"
-                                   FontFamily="Segoe UI Light"
-                                   FontSize="43"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   Text="--%"/>
-                        <StackPanel Grid.Column="1"
-                                    Margin="13,9,0,0"
-                                    VerticalAlignment="Center">
-                            <TextBlock FontFamily="Microsoft YaHei UI"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       Text="剩余用量"/>
-                            <TextBlock x:Name="FetchedText"
-                                       Margin="0,4,0,0"
-                                       FontSize="10.5"
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       Text="等待 Codex 数据"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <ProgressBar x:Name="UsageProgress"
-                                 Grid.Row="2"
-                                 Margin="0,0,0,2"
-                                 Value="0"
-                                 Style="{StaticResource UsageProgressStyle}"/>
-
-                    <StackPanel Grid.Row="3"
-                                Margin="0,6,0,0">
-                        <TextBlock x:Name="PrimaryWindowText"
-                                   FontFamily="Microsoft YaHei UI"
-                                   FontSize="11"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="正在读取限额窗口…"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="SecondaryWindowText"
-                                   Margin="0,4,0,0"
-                                   FontFamily="Microsoft YaHei UI"
-                                   FontSize="10.5"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   Text=""
-                                   TextTrimming="CharacterEllipsis"/>
-                    </StackPanel>
-
-                    <Grid Grid.Row="4">
+                    <Border Grid.Row="1" Background="{DynamicResource SurfaceRaisedBrush}"
+                            BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
+                            CornerRadius="10" Padding="14,10" Margin="0,0,0,10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="68"/>
+                                <RowDefinition Height="18"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="RemainingText" VerticalAlignment="Center"
+                                           FontFamily="Segoe UI Light" FontSize="44" Text="--%"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"/>
+                                <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="剩余用量" FontFamily="Microsoft YaHei UI" FontSize="12"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                    <TextBlock x:Name="FetchedText" Margin="0,5,0,0" FontSize="11"
+                                               Text="等待 Codex 数据" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource MutedTextBrush}"/>
+                                </StackPanel>
+                            </Grid>
+                            <ProgressBar x:Name="UsageProgress" Grid.Row="1" VerticalAlignment="Center"
+                                         Value="0" Style="{StaticResource UsageProgressStyle}"/>
+                            <StackPanel Grid.Row="2" VerticalAlignment="Center">
+                                <TextBlock x:Name="PrimaryWindowText" FontFamily="Microsoft YaHei UI" FontSize="11"
+                                           Text="正在读取限额窗口…" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"/>
+                                <TextBlock x:Name="SecondaryWindowText" Margin="0,6,0,0" FontFamily="Microsoft YaHei UI"
+                                           FontSize="11" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource MutedTextBrush}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="FooterText"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Bottom"
-                                   FontFamily="Microsoft YaHei UI"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   Text="Codex Desktop · 每分钟兜底刷新"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="1"
-                                   HorizontalAlignment="Right"
-                                   VerticalAlignment="Bottom"
-                                   FontFamily="Segoe UI"
-                                   FontSize="9.5"
-                                   Foreground="{DynamicResource VersionBrush}"
-                                   Text="v1.1"/>
+                        <TextBlock x:Name="FooterText" Margin="0,0,12,0" VerticalAlignment="Center"
+                                   FontFamily="Microsoft YaHei UI" FontSize="10" TextTrimming="CharacterEllipsis"
+                                   Text="Codex Desktop · 每分钟兜底刷新" Foreground="{DynamicResource MutedTextBrush}"/>
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontFamily="Segoe UI" FontSize="10"
+                                   Text="v1.1" Foreground="{DynamicResource VersionBrush}"/>
                     </Grid>
-                </Grid>
               </Grid>
               </Grid>
 

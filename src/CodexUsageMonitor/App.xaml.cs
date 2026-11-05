@@ -8,6 +8,18 @@ namespace CodexUsageMonitor
 {
     public partial class App : Application
     {
+        static App()
+        {
+            // Opt into per-monitor rendering before creating any windows.
+            // The net40 defaults ignore DPI changes even with a PerMonitorV2 manifest.
+            Type context = typeof(object).Assembly.GetType("System.AppContext");
+            if (context == null) return;
+            var setSwitch = context.GetMethod("SetSwitch", new[] { typeof(string), typeof(bool) });
+            if (setSwitch == null) return;
+            setSwitch.Invoke(null, new object[] { "Switch.System.Windows.DoNotScaleForDpiChanges", false });
+            setSwitch.Invoke(null, new object[] { "Switch.System.Windows.DoNotUsePresentationDpiCapabilityTier2OrGreater", false });
+        }
+
         private const string MutexName =
             "Local\\CodexUsageMonitor-57EB66F7-53A4-4EE9-B68C-52D2379E38A7";
         private const string ShowEventName =

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Made expanded cards snap on release after overshooting a screen edge, while retaining easy inward dragging of compact handles.
+- Fixed stretched compact surfaces and oversized content when moving between monitors with different DPI settings.
+- Enabled WPF per-monitor rendering on supported runtimes and aligned native sizing with the actual WPF transform.
+- Unified quota and session panels at 520 DIPs wide, with matching card spacing and separate rows for session metadata and Token counts.
+- Added hidden-window regression checks across connected monitors, using the same DPI manifest as the application.
+
 ## 1.1.0
 
 - Replaced the wide compact card with a small direction-aware semicircle: `30×52` DIPs on
