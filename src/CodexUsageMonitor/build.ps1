@@ -59,7 +59,35 @@ $msbuild = Resolve-MSBuild
 New-Item -ItemType Directory -Force -Path $assetRoot | Out-Null
 & $iconGenerator
 
-& $msbuild $project /restore /t:Rebuild /p:Configuration=$Configuration /p:Platform=x64 /nologo /verbosity:minimal
+& $msbuild $project /t:Restore /p:Configuration=$Configuration /p:Platform=x64 /nologo /verbosity:minimal | Out-Host
+if ($LASTEXITCODE -ne 0) {
+    throw "NuGet restore failed with exit code $LASTEXITCODE."
+}
+
+$assetsPath = Join-Path $projectRoot 'obj\project.assets.json'
+$assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
+$referencePackage = $assets.libraries.PSObject.Properties |
+    Where-Object { $_.Name -like 'Microsoft.NETFramework.ReferenceAssemblies.net40/*' } |
+    Select-Object -First 1
+if ($null -eq $referencePackage) {
+    throw 'The restored assets do not contain the .NET Framework 4.0 reference package.'
+}
+
+$referenceRoot = $null
+foreach ($packageFolder in $assets.packageFolders.PSObject.Properties.Name) {
+    $candidate = Join-Path (Join-Path $packageFolder $referencePackage.Value.path) 'build'
+    if (Test-Path -LiteralPath (Join-Path $candidate '.NETFramework\v4.0\mscorlib.dll') -PathType Leaf) {
+        $referenceRoot = $candidate
+        break
+    }
+}
+if (-not $referenceRoot) {
+    throw 'The restored .NET Framework 4.0 reference assemblies could not be located.'
+}
+
+# WPF temporary projects do not inherit the main project's generated NuGet imports.
+# A global property gives them the same reference assemblies on clean build agents.
+& $msbuild $project /t:Rebuild /p:Configuration=$Configuration /p:Platform=x64 "/p:TargetFrameworkRootPath=$referenceRoot" /nologo /verbosity:minimal | Out-Host
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed with exit code $LASTEXITCODE."
 }
