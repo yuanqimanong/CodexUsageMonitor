@@ -51,12 +51,17 @@ jobs:
             ${{ steps.package.outputs.plugin_zip }}
           if-no-files-found: error
 
-      - name: Publish GitHub Release
+      - name: Upload draft release
         if: github.ref_type == 'tag'
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $notesPath = "docs/releases/${{ github.ref_name }}.md"
+          $notesArguments = @('--generate-notes')
+          if (Test-Path -LiteralPath $notesPath) {
+            $notesArguments = @('--notes-file', $notesPath)
+          }
           gh release create "${{ github.ref_name }}" `
             "${{ steps.package.outputs.raw_exe }}" `
             "${{ steps.package.outputs.sha_file }}" `
@@ -64,5 +69,36 @@ jobs:
             "${{ steps.package.outputs.plugin_zip }}" `
             --repo "${{ github.repository }}" `
             --title "Codex Usage Monitor ${{ github.ref_name }}" `
-            --generate-notes `
-            --verify-tag
+            --verify-tag `
+            --draft `
+            @notesArguments
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed.' }
+
+      - name: Verify downloads and publish release
+        if: github.ref_type == 'tag'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $downloadDirectory = Join-Path $env:RUNNER_TEMP 'release-download-check'
+          gh release download "${{ github.ref_name }}" `
+            --repo "${{ github.repository }}" --dir $downloadDirectory
+          if ($LASTEXITCODE -ne 0) { throw 'Release download verification failed.' }
+          $expectedFiles = @('CodexUsageMonitor.exe', 'CodexUsageMonitor-windows-x64.zip', 'codex-usage-monitor-plugin.zip')
+          $verifiedFiles = @()
+          foreach ($line in Get-Content -LiteralPath (Join-Path $downloadDirectory 'SHA256SUMS.txt')) {
+            if ($line -notmatch '^([0-9a-f]{64}) \*(.+)$') { throw 'Invalid checksum entry.' }
+            $expectedHash = $Matches[1]
+            $fileName = $Matches[2]
+            if ($expectedFiles -notcontains $fileName -or $verifiedFiles -contains $fileName) {
+              throw "Unexpected or duplicate asset: $fileName"
+            }
+            $actualHash = (Get-FileHash -LiteralPath (Join-Path $downloadDirectory $fileName) -Algorithm SHA256).Hash
+            if ($actualHash -ne $expectedHash) { throw "SHA-256 mismatch: $fileName" }
+            $verifiedFiles += $fileName
+          }
+          if ($verifiedFiles.Count -ne $expectedFiles.Count) { throw 'Checksum manifest is incomplete.' }
+          if (@(Get-ChildItem -LiteralPath $downloadDirectory -File).Count -ne 4) { throw 'Unexpected release asset count.' }
+          gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed.' }

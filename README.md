@@ -88,7 +88,9 @@ Get-FileHash .\CodexUsageMonitor.exe -Algorithm SHA256
 
 ## 作为 Codex 插件使用
 
-从下载页获取 `codex-usage-monitor-plugin.zip`，完整解压。在包含隐藏目录 `.agents` 的解压目录中打开 PowerShell，运行以下命令。
+从同一版本的下载页获取 `codex-usage-monitor-plugin.zip` 和 `Source code (zip)`。先解压 `Source code (zip)`，再把插件包的全部内容（包括隐藏目录 `.codex-plugin`）覆盖到其中的 `plugins/codex-usage-monitor` 目录。
+
+在外层包含隐藏目录 `.agents` 的目录中打开 PowerShell，运行以下命令。
 
 ```powershell
 codex plugin marketplace add (Resolve-Path '.').Path

@@ -147,8 +147,8 @@
                         <TextBlock x:Name="FooterText" Margin="0,0,12,0" VerticalAlignment="Center"
                                    FontFamily="Microsoft YaHei UI" FontSize="10" TextTrimming="CharacterEllipsis"
                                    Text="Codex Desktop · 每分钟兜底刷新" Foreground="{DynamicResource MutedTextBrush}"/>
-                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontFamily="Segoe UI" FontSize="10"
-                                   Text="v1.1" Foreground="{DynamicResource VersionBrush}"/>
+                        <TextBlock x:Name="VersionText" Grid.Column="1" VerticalAlignment="Center" FontFamily="Segoe UI" FontSize="10"
+                                   Foreground="{DynamicResource VersionBrush}"/>
                     </Grid>
               </Grid>
               </Grid>

@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-monitor",
-  "version": "1.1.0+codex.20260727032013",
+  "version": "1.2.0+codex.20261105023342",
   "description": "A lightweight Windows panel for Codex quota, local chat speed and Token usage.",
   "author": {
     "name": "Codex Usage Monitor contributors"
