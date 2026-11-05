@@ -59,7 +59,7 @@ $msbuild = Resolve-MSBuild
 New-Item -ItemType Directory -Force -Path $assetRoot | Out-Null
 & $iconGenerator
 
-& $msbuild $project /restore /t:Rebuild /p:Configuration=$Configuration /p:Platform=x64 /nologo /verbosity:minimal
+& $msbuild $project /restore /t:Rebuild /p:Configuration=$Configuration /p:Platform=x64 /nologo /verbosity:minimal | Out-Host
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed with exit code $LASTEXITCODE."
 }
